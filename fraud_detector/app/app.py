@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Set kafka configuration file
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 TRANSACTIONS_TOPIC = os.getenv("KAFKA_TRANSACTIONS_TOPIC", "transactions")
-SCORING_TOPIC = os.getenv("KAFKA_SCORING_TOPIC", "scoring")
+SCORES_TOPIC = os.getenv("KAFKA_SCORES_TOPIC", "scores")
 
 
 class ProcessingService:
@@ -61,19 +61,29 @@ class ProcessingService:
                 transaction_id = data['transaction_id']
                 input_df = pd.DataFrame([data['data']])
 
-                # Препроцессинг и предсказание
+                # Препроцессинг и предсказание (inference на CPU)
                 processed_df = run_preproc(self.train, input_df)
                 submission = make_pred(processed_df, "kafka_stream")
 
-                # Добавляем ID в результат
-                submission['transaction_id'] = transaction_id
+                # Формируем результат строго из трёх полей: transaction_id, score, fraud_flag
+                result = {
+                    "transaction_id": transaction_id,
+                    "score": float(submission['score'].iloc[0]),
+                    "fraud_flag": int(submission['fraud_flag'].iloc[0]),
+                }
 
-                # Отправка результата в топик scoring
+                # Отправка результата в топик scores
                 self.producer.produce(
-                    'scoring',
-                    value=submission.to_json(orient='records')
+                    SCORES_TOPIC,
+                    key=str(transaction_id),
+                    value=json.dumps(result),
                 )
+                self.producer.poll(0)
                 self.producer.flush()
+                logger.info(
+                    "Scored transaction %s -> score=%.4f, fraud_flag=%d",
+                    transaction_id, result["score"], result["fraud_flag"],
+                )
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
 

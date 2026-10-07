@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import psycopg2
 from kafka import KafkaProducer
 import json
 import time
@@ -11,6 +13,49 @@ KAFKA_CONFIG = {
     "bootstrap_servers": os.getenv("KAFKA_BROKERS", "kafka:9092"),
     "topic": os.getenv("KAFKA_TOPIC", "transactions")
 }
+
+# Конфигурация PostgreSQL
+POSTGRES_CONFIG = {
+    "host": os.getenv("POSTGRES_HOST", "postgres"),
+    "port": os.getenv("POSTGRES_PORT", "5432"),
+    "dbname": os.getenv("POSTGRES_DB", "fraud"),
+    "user": os.getenv("POSTGRES_USER", "fraud"),
+    "password": os.getenv("POSTGRES_PASSWORD", "fraud"),
+}
+POSTGRES_TABLE = os.getenv("POSTGRES_TABLE", "scores")
+
+
+def get_pg_connection():
+    """Подключение к PostgreSQL."""
+    return psycopg2.connect(**POSTGRES_CONFIG)
+
+
+def _query_df(query, params, columns):
+    """Выполнить запрос и вернуть результат в виде DataFrame."""
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    return pd.DataFrame(rows, columns=columns)
+
+
+def fetch_last_frauds(limit=10):
+    """Последние записи с флагом фрода (fraud_flag == 1)."""
+    query = (
+        f"SELECT transaction_id, score, fraud_flag, created_at "
+        f"FROM {POSTGRES_TABLE} WHERE fraud_flag = 1 "
+        f"ORDER BY id DESC LIMIT %s"
+    )
+    return _query_df(query, (limit,), ["transaction_id", "score", "fraud_flag", "created_at"])
+
+
+def fetch_last_scores(limit=100):
+    """Скоры последних транзакций для построения гистограммы."""
+    query = f"SELECT score FROM {POSTGRES_TABLE} ORDER BY id DESC LIMIT %s"
+    return _query_df(query, (limit,), ["score"])
 
 def load_file(uploaded_file):
     """Загрузка CSV файла в DataFrame"""
@@ -100,3 +145,34 @@ if st.session_state.uploaded_files:
                             st.rerun()
                 else:
                     st.error("Файл не содержит данных")
+
+# ---------------------------------------------------------------------------
+# Раздел просмотра результатов скоринга из PostgreSQL
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("📊 Результаты скоринга")
+
+if st.button("Посмотреть результаты"):
+    try:
+        # 1. Последние 10 фродовых транзакций
+        st.subheader("🚨 Последние 10 фродовых транзакций (fraud_flag == 1)")
+        frauds = fetch_last_frauds(limit=10)
+        if frauds.empty:
+            st.info("Фродовых транзакций пока нет в базе.")
+        else:
+            st.dataframe(frauds, use_container_width=True)
+
+        # 2. Гистограмма скоров последних 100 транзакций
+        st.subheader("📈 Распределение скоров последних 100 транзакций")
+        scores = fetch_last_scores(limit=100)
+        if scores.empty:
+            st.info("В базе пока нет результатов скоринга.")
+        else:
+            fig, ax = plt.subplots()
+            ax.hist(scores["score"], bins=20, color="#4C72B0", edgecolor="black")
+            ax.set_xlabel("Скор модели")
+            ax.set_ylabel("Количество транзакций")
+            ax.set_title(f"Гистограмма скоров (последние {len(scores)} транзакций)")
+            st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Не удалось получить результаты из базы: {e}")

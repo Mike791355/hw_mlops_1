@@ -58,8 +58,9 @@ def load_train_data():
     categorical_cols = ['gender', 'merch', 'cat_id', 'one_city', 'us_state', 'jobs']
     n_cats = 50
 
-    # Import Train dataset
-    train = pd.read_csv('./train_data/train.csv').drop(columns=['name_1', 'name_2', 'street', 'post_code'])
+    # Import Train dataset (compressed to keep the repository under GitHub's file size limits;
+    # pandas detects the gzip codec automatically from the .gz extension)
+    train = pd.read_csv('./train_data/train.csv.gz').drop(columns=['name_1', 'name_2', 'street', 'post_code'])
     logger.info('Raw train data imported. Shape: %s', train.shape)
 
     # Add some simple time features

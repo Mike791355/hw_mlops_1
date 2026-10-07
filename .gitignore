@@ -1,0 +1,14 @@
+data/
+*.csv
+
+!fraud_detector/train_data/train.csv.gz
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+*.log
+
+.DS_Store
