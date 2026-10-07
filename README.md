@@ -1,8 +1,5 @@
 # Скоринг фродовых транзакций
 
-Учебный проект на основе [примера с семинара](https://github.com/NikitaMalykhin/mts25_mlops_hw2_real_time_fraud_detection).
-Данные — из [соревнования](https://www.kaggle.com/competitions/teta-ml-1-2025).
-
 Сервис читает транзакции из Kafka, выполняет препроцессинг и скоринг предобученной
 моделью CatBoost на CPU. Обучение модели в контейнере не выполняется.
 Результаты отправляются в топик `scores` и сохраняются в PostgreSQL.
@@ -10,7 +7,7 @@
 
 ## Состав проекта
 
-- `fraud_detector/app/app.py` — чтение и запись сообщений Kafka.
+- `fraud_detector/app/app.py` - чтение и запись сообщений Kafka.
 - `fraud_detector/src/preprocessing.py` — препроцессинг данных.
 - `fraud_detector/src/scorer.py` — загрузка модели и скоринг.
 - `interface/app.py` — загрузка CSV и просмотр результатов.
